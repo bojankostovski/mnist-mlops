@@ -1,0 +1,35 @@
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: mnist-digit-classifier
+  namespace: kubeflow
+spec:
+  predictor:
+    minReplicas: 1
+    maxReplicas: 3
+    containers:
+    - name: kserve-container
+      image: mnist-torchserve:v1
+      imagePullPolicy: Never
+      # FIX: Add security context
+      securityContext:
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        runAsUser: 1000
+        capabilities:
+          drop:
+          - ALL
+      ports:
+      - containerPort: 8080
+        name: http
+        protocol: TCP
+      env:
+      - name: MODEL_NAME
+        value: mnist
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          cpu: "2"
+          memory: "2Gi"

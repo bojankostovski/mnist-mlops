@@ -1,0 +1,166 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kubeflow-staging
+  labels:
+    name: kubeflow-staging
+    environment: staging
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mnist-torchserve
+  namespace: kubeflow-staging
+  labels:
+    app: mnist-torchserve
+    version: v1
+    environment: staging
+spec:
+  replicas: 2  # High availability
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0  # Zero-downtime deployment
+  selector:
+    matchLabels:
+      app: mnist-torchserve
+  template:
+    metadata:
+      labels:
+        app: mnist-torchserve
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8082"
+    spec:
+      # Pod-level security context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      
+      containers:
+      - name: torchserve
+        image: mnist-torchserve:latest  # Will be updated by CI/CD
+        imagePullPolicy: Always
+        
+        # Container-level security context
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: false
+        
+        ports:
+        - containerPort: 8080
+          name: inference
+          protocol: TCP
+        - containerPort: 8081
+          name: management
+          protocol: TCP
+        - containerPort: 8082
+          name: metrics
+          protocol: TCP
+        
+        # Health checks
+        livenessProbe:
+          httpGet:
+            path: /ping
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /ping
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        
+        # Resource limits
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "2"
+            memory: "2Gi"
+        
+        # Environment variables
+        env:
+        - name: MODEL_NAME
+          value: mnist
+        - name: LOG_LEVEL
+          value: INFO
+        - name: ENVIRONMENT
+          value: staging
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mnist-torchserve
+  namespace: kubeflow-staging
+  labels:
+    app: mnist-torchserve
+spec:
+  type: ClusterIP
+  selector:
+    app: mnist-torchserve
+  ports:
+  - name: inference
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  - name: management
+    port: 8081
+    targetPort: 8081
+    protocol: TCP
+  - name: metrics
+    port: 8082
+    targetPort: 8082
+    protocol: TCP
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mnist-network-policy
+  namespace: kubeflow-staging
+spec:
+  podSelector:
+    matchLabels:
+      app: mnist-torchserve
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: kubeflow-staging
+    ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 8081
+  egress:
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 53  # DNS
+    - protocol: UDP
+      port: 53  # DNS
