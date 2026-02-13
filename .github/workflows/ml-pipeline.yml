@@ -107,6 +107,11 @@ jobs:
             p/python
             p/docker
             p/kubernetes
+        env:
+          SEMGREP_RULES: |
+            --exclude=lib/
+            --exclude=venv/
+            --exclude='*.pyc'
       
       # 3.3: Software Composition Analysis (Safety)
       - name: Set up Python for SCA
