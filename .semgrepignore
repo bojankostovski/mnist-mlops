@@ -1,0 +1,18 @@
+# Library code - not our responsibility
+lib/
+venv/
+build/
+dist/
+*.egg-info/
+__pycache__/
+model-store/
+
+# Third-party Kubernetes manifests
+cert-manager.yaml
+kserve.yaml
+knative-serving.yaml
+kourier.yaml
+
+# Test/example files with intentional patterns
+draw_and_test.py
+vault_example.py
