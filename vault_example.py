@@ -1,5 +1,5 @@
 import hvac
-import os
+# import os
 
 # Connect to Vault
 client = hvac.Client(
